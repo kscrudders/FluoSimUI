@@ -10,7 +10,7 @@
 *** I would be overjoyed to help enable you to make discoveries and share knowlegde with humanity.
 -->
 
-<!-- PROJECT LOGO --> <br /> <div align="center">   <a href="https://github.com/kscrudders/FluoSimUI"> <img src="/FluoSimUI_projectlogo.png" alt="Logo" width="402" height="300"> </a> <h3 align="center">Fluorescence Spectra Simulation UI (FluoSimUI)</h3> <p align="center"> A MATLAB-based UI for visualizing fluorescence spectra and evaluating the impact of different optical elements <br /> <a href="https://github.com/your_username/FluoSimUI"><strong>Explore the docs »</strong></a> <br /> <br /> <a href="https://github.com/kscrudders/FluoSimUI/issues">Report Bug</a> · <a href="https://github.com/kscrudders/FluoSimUI/issues">Request Feature</a> </p> </div> <!-- TABLE OF CONTENTS --> <details> <summary>Table of Contents</summary> <ol> <li><a href="#about-the-project">About The Project</a></li> <li><a href="#built-with">Built With</a></li> <li><a href="#getting-started">Getting Started</a> <ul> <li><a href="#prerequisites">Prerequisites</a></li> <li><a href="#installation">Installation</a></li> </ul> </li> <li><a href="#usage">Usage</a></li> <li><a href="#roadmap">Roadmap</a></li> <li><a href="#contributing">Contributing</a></li> <li><a href="#license">License</a></li> <li><a href="#contact">Contact</a></li> <li><a href="#acknowledgments">Acknowledgments</a></li> </ol> </details> <!-- ABOUT THE PROJECT -->
+<!-- PROJECT LOGO --> <br /> <div align="center">   <a href="https://github.com/kscrudders/FluoSimUI"> <img src="/images/FluoSimUI_projectlogo.png" alt="Logo" width="402" height="300"> </a> <h3 align="center">Fluorescence Spectra Simulation UI (FluoSimUI)</h3> <p align="center"> A MATLAB-based UI for visualizing fluorescence spectra and evaluating the impact of different optical elements <br /> <a href="https://github.com/your_username/FluoSimUI"><strong>Explore the docs »</strong></a> <br /> <br /> <a href="https://github.com/kscrudders/FluoSimUI/issues">Report Bug</a> · <a href="https://github.com/kscrudders/FluoSimUI/issues">Request Feature</a> </p> </div> <!-- TABLE OF CONTENTS --> <details> <summary>Table of Contents</summary> <ol> <li><a href="#about-the-project">About The Project</a></li> <li><a href="#built-with">Built With</a></li> <li><a href="#getting-started">Getting Started</a> <ul> <li><a href="#prerequisites">Prerequisites</a></li> <li><a href="#installation">Installation</a></li> </ul> </li> <li><a href="#usage">Usage</a></li> <li><a href="#roadmap">Roadmap</a></li> <li><a href="#contributing">Contributing</a></li> <li><a href="#license">License</a></li> <li><a href="#contact">Contact</a></li> <li><a href="#acknowledgments">Acknowledgments</a></li> </ol> </details> <!-- ABOUT THE PROJECT -->
 About The Project
 FluoSimUI is a MATLAB-based graphical user interface (GUI) designed to streamline the selection and visualization of fluorophore excitation and emission spectra. The tool allows users to:
 
@@ -70,7 +70,7 @@ Usage:
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p> <!-- ROADMAP -->
 
-<br /> <div align="center">   <a href="https://github.com/kscrudders/FluoSimUI"> <img src="/FluoSimUI_screenshot.png" alt="GUI Screenshot" width="775" height="600"> </a> 
+<br /> <div align="center">   <a href="https://github.com/kscrudders/FluoSimUI"> <img src="/images/FluoSimUI_screenshot.png" alt="GUI Screenshot" width="775" height="600"> </a> 
 <div align="left">
 
 ## Roadmap
