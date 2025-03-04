@@ -70,7 +70,8 @@ Usage:
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p> <!-- ROADMAP -->
 
-<br /> <div align="center">   <a href="https://github.com/kscrudders/FluoSimUI"> <img src="/FluoSimUI_screenshot.png" alt="GUI Screenshot" width="775" height="600"> </a>
+<br /> <div align="center">   <a href="https://github.com/kscrudders/FluoSimUI"> <img src="/FluoSimUI_screenshot.png" alt="GUI Screenshot" width="775" height="600"> </a> 
+<div align="left">
 
 ## Roadmap
 
