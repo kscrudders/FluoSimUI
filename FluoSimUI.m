@@ -1,7 +1,7 @@
 function FluoSimUI()
-    spectra_filePath = 'D:\01_Matlab\99_Github\FluoSimUI\01_Ex_Em_Spectra.csv';
-    filter_filePath = 'D:\01_Matlab\99_Github\FluoSimUI\02_Filter_Transmission_Spectra.csv';
-    camera_filePath = "D:\01_Matlab\99_Github\FluoSimUI\Camera_Quantum_Yield\EMCCD_Andor.csv";
+    spectra_filePath = 'Q:\01_Matlab\99_Github\FluoSimUI\01_Ex_Em_Spectra.csv';
+    filter_filePath = 'Q:\01_Matlab\99_Github\FluoSimUI\02_Filter_Transmission_Spectra.csv';
+    camera_filePath = "Q:\01_Matlab\99_Github\FluoSimUI\Camera_Quantum_Yield\EMCCD_Andor.csv";
 
     % Get default figure position
     Pos = get(0, 'defaultfigureposition');
@@ -310,6 +310,8 @@ function FluoSimUI()
                             Abs_efficiency = curr_efficiency;
                             laser_selection = ii;
                         end
+                    else
+                        laser_selection = 1; % default to the first laser
                     end
                 end
                 
