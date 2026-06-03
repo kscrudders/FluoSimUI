@@ -1,16 +1,59 @@
-function FluoSimUI()
-    spectra_filePath = 'Q:\01_Matlab\99_Github\FluoSimUI\01_Ex_Em_Spectra.csv';
-    filter_filePath = 'Q:\01_Matlab\99_Github\FluoSimUI\02_Filter_Transmission_Spectra.csv';
-    camera_filePath = "Q:\01_Matlab\99_Github\FluoSimUI\Camera_Quantum_Yield\EMCCD_Andor.csv";
+function FluoSimUI_v3()
+    % FluoSimUI_v3
+    % ------------------------------------------------------------------
+    % Updated for MATLAB R2025a/b.
+    %
+    %   * Resolution-independent layout: window is 3/4 of the monitor
+    %     (or a fixed 1920x1080 via USE_FIXED_SIZE). Every element is laid
+    %     out in a fixed 1400x1050 "design space" and scaled by scalePos().
+    %
+    %   * Bug fix: valid_idx_ex is now always defined (was only created
+    %     inside the Plot-Ex block, but used by the laser code).
+    %
+    %   * FRET analysis (toggle): highlight exactly two fluorophores in the
+    %     selected list. Donor = lower emission-peak wavelength. Reports the
+    %     raw donor-EM / acceptor-EX overlap and the full-setup collected
+    %     acceptor intensity (donor reduced by laser + Ex filter, acceptor
+    %     reduced by the Em filter only).
+    %
+    %   * Self-quench overlap (toggle): own-EM / own-EX overlap, per FP.
+    %
+    %   * Emission filter list is now multi-select; selected filters are
+    %     combined by multiplication (series stacking). Dichroic is taken
+    %     from the first selected filter.
+    % ------------------------------------------------------------------
 
-    % Get default figure position
-    Pos = get(0, 'defaultfigureposition');
-    screenSize = get(0, 'ScreenSize'); % [left, bottom, width, height]
-    
-    % Define enlarged figure size
-    figureWidth = Pos(3) * 2.5; 
-    figureHeight = Pos(4) * 2.5;  
-    figPosition = [5, screenSize(4) - figureHeight - 85, figureWidth, figureHeight];
+    spectra_filePath = 'E:\01_Matlab\99_Github\FluoSimUI\01_Ex_Em_Spectra.csv';
+    filter_filePath = 'E:\01_Matlab\99_Github\FluoSimUI\02_Filter_Transmission_Spectra.csv';
+    camera_filePath = "E:\01_Matlab\99_Github\FluoSimUI\Camera_Quantum_Yield\Camera_list.csv";
+
+    %---------------------------------------------------------%
+    % Figure sizing (resolution-independent)
+    %---------------------------------------------------------%
+    USE_FIXED_SIZE = false;   % true -> fixed 1920x1080 window
+
+    screenSize = get(0, 'ScreenSize');   % [left, bottom, width, height]
+    screenW = screenSize(3);
+    screenH = screenSize(4);
+
+    if USE_FIXED_SIZE
+        figureWidth  = 1920;
+        figureHeight = 1080;
+    else
+        figureWidth  = round(0.75 * screenW);
+        figureHeight = round(0.75 * screenH);
+    end
+
+    % Design space the layout was authored for (2.5x the 560x420 default).
+    designW = 1400;
+    designH = 1050;
+
+    sx = figureWidth  / designW;
+    sy = figureHeight / designH;
+
+    figX = max(1, round((screenW - figureWidth)  / 2));
+    figY = max(1, round((screenH - figureHeight) / 2));
+    figPosition = [figX, figY, figureWidth, figureHeight];
 
     % Create UI figure
     fig = uifigure('Name', 'FluoSimUI', 'Position', figPosition);
@@ -26,22 +69,19 @@ function FluoSimUI()
     fluorophoreNamesRaw = data.Properties.VariableNames(2:end);  % Skip 'wavelength'
 
     % Clean fluorophore names (remove EX and EM suffixes)
-    cleanedNames = unique(regexprep(fluorophoreNamesRaw, '_?(EX|EM)$', '', 'ignorecase'));    
+    cleanedNames = unique(regexprep(fluorophoreNamesRaw, '_?(EX|EM)$', '', 'ignorecase'));
 
     % Load filter data
     filter_data = readtable(filter_filePath,'VariableNamingRule','preserve');
-    % Clean fluorophore names (remove EX and EM suffixes)
-    cleanedFilterNames = unique(regexprep(filter_data.Properties.VariableNames(2:end), '_?(Ex|Dichroic|Em)$', '', 'ignorecase')); 
+    cleanedFilterNames = unique(regexprep(filter_data.Properties.VariableNames(2:end), '_?(Ex|Dichroic|Em)$', '', 'ignorecase'));
 
     % Load camera data
     camera_data = readtable(camera_filePath,'VariableNamingRule','preserve');
-    % Clean fluorophore names (remove EX and EM suffixes)
-    cameraNames = unique(camera_data.Properties.VariableNames(2:end)); 
+    cameraNames = unique(camera_data.Properties.VariableNames(2:end));
 
     %---------------------------------------------------------%
-    % UI elements
+    % UI elements (design-space coords; scalePos() -> window pixels)
     %---------------------------------------------------------%
-    % UI dimensions
     left_off_set = 20;
     list_width = 250;
     list_height = 200;
@@ -55,127 +95,144 @@ function FluoSimUI()
     %----------------%
     % Fluorophore selection Items
     %----------------%
-    % Search bar
     searchBox = uieditfield(fig, 'text', 'Placeholder', 'Search fluorophore...', ...
-        'Position', [left_off_set, figureHeight - 50, list_width, 25], ...
+        'Position', scalePos(left_off_set, designH - 50, list_width, 25), ...
         'ValueChangedFcn', @(src, event) filterList());
 
-    % Listbox for fluorophore selection
-    lb = uilistbox(fig, 'Position', [left_off_set, figureHeight - 270, list_width, list_height], 'Items', cleanedNames);
+    lb = uilistbox(fig, 'Position', scalePos(left_off_set, designH - 270, list_width, list_height), 'Items', cleanedNames);
     lb.Multiselect = 'on';
 
-    % Selected fluorophore list
-    selectionList = uilistbox(fig, 'Position', [left_off_set + list_width + width_from_list*2 + button_width, figureHeight - 270, 200, list_height], 'Items', {});
+    selectionList = uilistbox(fig, 'Position', scalePos(left_off_set + list_width + width_from_list*2 + button_width, designH - 270, 200, list_height), 'Items', {});
     selectionList.Multiselect = 'on';
 
-    % Fluorophore list buttons
     addBtn = uibutton(fig, 'push', 'Text', 'Add ->', ...
-        'Position', [left_off_set + list_width + width_from_list, figureHeight - first_button_height, button_width, button_height], 'ButtonPushedFcn', @(src, event) addSelection());
+        'Position', scalePos(left_off_set + list_width + width_from_list, designH - first_button_height, button_width, button_height), 'ButtonPushedFcn', @(src, event) addSelection());
 
     removeBtn = uibutton(fig, 'push', 'Text', '<- Remove', ...
-        'Position', [left_off_set + list_width + width_from_list, figureHeight - (first_button_height + button_height_offset), button_width, button_height], 'ButtonPushedFcn', @(src, event) removeSelection());
+        'Position', scalePos(left_off_set + list_width + width_from_list, designH - (first_button_height + button_height_offset), button_width, button_height), 'ButtonPushedFcn', @(src, event) removeSelection());
 
     clearAllBtn = uibutton(fig, 'push', 'Text', 'Clear All', ...
-        'Position', [left_off_set + list_width + width_from_list, figureHeight - (first_button_height + button_height_offset*2), button_width, button_height], 'ButtonPushedFcn', @(src, event) clearAllSelection());
+        'Position', scalePos(left_off_set + list_width + width_from_list, designH - (first_button_height + button_height_offset*2), button_width, button_height), 'ButtonPushedFcn', @(src, event) clearAllSelection());
 
-    % Toggle checkbox for plotting ExSpectra
     plot_ExSpectra_flag = 1;
     plotExCheckbox = uicheckbox(fig, 'Text', 'Plot Ex', 'Value', true, ...
-        'Position', [left_off_set + list_width + width_from_list*2 + button_width+20, figureHeight - (list_height + button_height_offset*2.5), list_width, 25], ...
+        'Position', scalePos(left_off_set + list_width + width_from_list*2 + button_width+20, designH - (list_height + button_height_offset*2.5), list_width, 25), ...
         'ValueChangedFcn', @(src, event) togglePlot_ExSpectra(src));
 
-    % Toggle checkbox for plotting EmSpectra
     plot_EmSpectra_flag = 1;
     plotEmCheckbox = uicheckbox(fig, 'Text', 'Plot Em', 'Value', true, ...
-        'Position', [left_off_set + list_width + width_from_list*2 + button_width + 120, figureHeight - (list_height + button_height_offset*2.5), list_width, 25], ...
+        'Position', scalePos(left_off_set + list_width + width_from_list*2 + button_width + 120, designH - (list_height + button_height_offset*2.5), list_width, 25), ...
         'ValueChangedFcn', @(src, event) togglePlot_EmSpectra(src));
 
     %----------------%
     % Laser Selection Items
     %----------------%
-    % Laser line input list
     laserInput = uieditfield(fig, 'numeric', 'Limits', [200, 1000], ...
-        'Position', [left_off_set + list_width*2 + width_from_list*2 + button_width, figureHeight - 95, list_width/3, 25], 'Placeholder', 'Laser line (nm)');
-    
-    laserList = uilistbox(fig, 'Position', [left_off_set + list_width*2 + width_from_list*2 + button_width, figureHeight - 195 - width_from_list, list_width/3, 100], 'Items', {'405', '488', '561', '640'});
+        'Position', scalePos(left_off_set + list_width*2 + width_from_list*2 + button_width, designH - 95, list_width/3, 25), 'Placeholder', 'Laser line (nm)');
 
-    % Laser line list buttons
+    laserList = uilistbox(fig, 'Position', scalePos(left_off_set + list_width*2 + width_from_list*2 + button_width, designH - 195 - width_from_list, list_width/3, 100), 'Items', {'405', '488', '561', '640'});
+
     addLaserBtn = uibutton(fig, 'push', 'Text', 'Add Laser', ...
-        'Position', [left_off_set + list_width*3 + width_from_list*3 + button_width - list_width*(2/3), figureHeight - first_button_height, button_width, button_height], 'ButtonPushedFcn', @(src, event) addLaser());
-    
+        'Position', scalePos(left_off_set + list_width*3 + width_from_list*3 + button_width - list_width*(2/3), designH - first_button_height, button_width, button_height), 'ButtonPushedFcn', @(src, event) addLaser());
+
     removeLaserBtn = uibutton(fig, 'push', 'Text', 'Remove Laser', ...
-        'Position', [left_off_set + list_width*3 + width_from_list*3 + button_width - list_width*(2/3), figureHeight - (first_button_height + button_height_offset), button_width, button_height], 'ButtonPushedFcn', @(src, event) removeLaser());
-    
+        'Position', scalePos(left_off_set + list_width*3 + width_from_list*3 + button_width - list_width*(2/3), designH - (first_button_height + button_height_offset), button_width, button_height), 'ButtonPushedFcn', @(src, event) removeLaser());
+
     clearAllLaserBtn = uibutton(fig, 'push', 'Text', 'Clear All', ...
-        'Position', [left_off_set + list_width*3 + width_from_list*3 + button_width - list_width*(2/3), figureHeight - (first_button_height + button_height_offset*2), button_width, button_height], 'ButtonPushedFcn', @(src, event) clearAllLaserSelection());
+        'Position', scalePos(left_off_set + list_width*3 + width_from_list*3 + button_width - list_width*(2/3), designH - (first_button_height + button_height_offset*2), button_width, button_height), 'ButtonPushedFcn', @(src, event) clearAllLaserSelection());
 
     %----------------%
     % Plot Button
     %----------------%
-    % plot button
     plotBtn = uibutton(fig, 'push', 'Text', 'Plot Spectra', ...
-        'Position', [left_off_set + list_width + width_from_list, figureHeight - (first_button_height + button_height_offset*4), button_width, button_height], 'ButtonPushedFcn', @(src, event) plotSpectra());
+        'Position', scalePos(left_off_set + list_width + width_from_list, designH - (first_button_height + button_height_offset*4), button_width, button_height), 'ButtonPushedFcn', @(src, event) plotSpectra());
 
     %----------------%
     % Filter Selection
     %----------------%
-    % Excitation Filters
+    % Excitation Filter (single select)
     exfilterLabel = uilabel(fig, 'Text', 'Excitation Filter', ...
-        'Position', [left_off_set + list_width*3 + width_from_list*3 + button_width, figureHeight - 270 + list_height, list_width, 25]);
-    
-    exfilter_List = uilistbox(fig, 'Position', [left_off_set + list_width*3 + width_from_list*3 + button_width, figureHeight - 270+100, list_width/2, list_height-100], 'Items', cleanedFilterNames);
+        'Position', scalePos(left_off_set + list_width*3 + width_from_list*3 + button_width, designH - 270 + list_height, list_width, 25)); %#ok<NASGU>
+
+    exfilter_List = uilistbox(fig, 'Position', scalePos(left_off_set + list_width*3 + width_from_list*3 + button_width, designH - 270+100, list_width/2, list_height-100), 'Items', cleanedFilterNames);
     exfilter_List.Multiselect = 'off';
     exfilter_List.Value = exfilter_List.Items{1};
     exfilter_List.UserData = exfilter_List.Value;
     exfilter_List.ValueChangedFcn = @(src, event) enforceSelection(src);
 
-    % Excitation Filters
-    emfilterLabel = uilabel(fig, 'Text', 'Emission Filter', ...
-        'Position', [left_off_set + list_width*3.5 + width_from_list*4 + button_width, figureHeight - 270 + list_height, list_width, 25]);
-    
-    emfilter_List = uilistbox(fig, 'Position', [left_off_set + list_width*3.5 + width_from_list*4 + button_width, figureHeight - 270+100, list_width/2, list_height-100], 'Items', cleanedFilterNames);
-    emfilter_List.Multiselect = 'off';
-    emfilter_List.Value = emfilter_List.Items{1};
+    % Emission Filter (multi-select; combined by multiplication)
+    emfilterLabel = uilabel(fig, 'Text', 'Emission Filter (multi-select)', ...
+        'Position', scalePos(left_off_set + list_width*3.5 + width_from_list*4 + button_width, designH - 270 + list_height, list_width, 25)); %#ok<NASGU>
+
+    emfilter_List = uilistbox(fig, 'Position', scalePos(left_off_set + list_width*3.5 + width_from_list*4 + button_width, designH - 270+100, list_width/2, list_height-100), 'Items', cleanedFilterNames);
+    emfilter_List.Multiselect = 'on';
+    emfilter_List.Value = emfilter_List.Items(1);   % start with one selection
     emfilter_List.UserData = emfilter_List.Value;
     emfilter_List.ValueChangedFcn = @(src, event) enforceSelection(src);
 
-    % Toggle checkbox for using filters
     use_filters_flag = 0;
     useFiltersCheckbox = uicheckbox(fig, 'Text', 'Use Filters', 'Value', false, ...
-        'Position', [left_off_set + list_width*3.5 + width_from_list*4 + button_width, figureHeight - 270 + list_height - 125, list_width, 25], ...
+        'Position', scalePos(left_off_set + list_width*3.5 + width_from_list*4 + button_width, designH - 270 + list_height - 125, list_width, 25), ...
         'ValueChangedFcn', @(src, event) toggleFilters(src));
 
-    % Toggle checkbox for plotting filters
     plot_filters_flag = 0;
     plotFiltersCheckbox = uicheckbox(fig, 'Text', 'Plot Filters', 'Value', false, ...
-        'Position', [left_off_set + list_width*3.5 + width_from_list*4 + button_width, figureHeight - 270 + list_height - 125 - 35, list_width, 25], ...
+        'Position', scalePos(left_off_set + list_width*3.5 + width_from_list*4 + button_width, designH - 270 + list_height - 125 - 35, list_width, 25), ...
         'ValueChangedFcn', @(src, event) togglePlotFilters(src));
 
     %----------------%
-    % Camera Quantum Yeild
+    % Camera Quantum Yield
     %----------------%
-    % Camera Quantum Yields
     cameraLabel = uilabel(fig, 'Text', 'Camera', ...
-        'Position', [left_off_set + list_width*4.2 + width_from_list*4 + button_width, figureHeight - 270 + list_height, list_width, 25]);
-    
-    camera_List = uilistbox(fig, 'Position', [left_off_set + list_width*4.2 + width_from_list*4 + button_width, figureHeight - 270+100, list_width/2, list_height-100], 'Items', cameraNames);
+        'Position', scalePos(left_off_set + list_width*4.2 + width_from_list*4 + button_width, designH - 270 + list_height, list_width, 25)); %#ok<NASGU>
+
+    camera_List = uilistbox(fig, 'Position', scalePos(left_off_set + list_width*4.2 + width_from_list*4 + button_width, designH - 270+100, list_width/2, list_height-100), 'Items', cameraNames);
     camera_List.Multiselect = 'off';
 
-    % Toggle checkbox for using camera Quantum Yield
     use_Cameras_flag = 0;
     useCamerasCheckbox = uicheckbox(fig, 'Text', 'Use Camera Quantum Yield', 'Value', false, ...
-        'Position', [left_off_set + list_width*4.2 + width_from_list*4 + button_width, figureHeight - 270 + list_height - 125, list_width, 25], ...
+        'Position', scalePos(left_off_set + list_width*4.2 + width_from_list*4 + button_width, designH - 270 + list_height - 125, list_width, 25), ...
         'ValueChangedFcn', @(src, event) toggleCameras(src));
 
-    % Toggle checkbox for plotting camera Quantum Yield
     plot_Cameras_flag = 0;
     plotCamerasCheckbox = uicheckbox(fig, 'Text', 'Plot Camera Quantum Yield', 'Value', false, ...
-        'Position', [left_off_set + list_width*4.2 + width_from_list*4 + button_width, figureHeight - 270 + list_height - 125 - 35, list_width, 25], ...
+        'Position', scalePos(left_off_set + list_width*4.2 + width_from_list*4 + button_width, designH - 270 + list_height - 125 - 35, list_width, 25), ...
         'ValueChangedFcn', @(src, event) togglePlotCameras(src));
-    % Axes for plotting
-    ax = uiaxes(fig, 'Position', [50, 30, figureWidth - 100, figureHeight - 350]);
 
-    % Local functions
+    %----------------%
+    % Analysis controls (FRET / self-quench) + results panel
+    %----------------%
+    fret_flag = 0;
+    selfquench_flag = 0;
+
+    analysisLabel = uilabel(fig, 'Text', 'Analysis  (FRET: highlight 2 FPs in the selected list)', ...
+        'Position', scalePos(60, 700, 240, 30)); %#ok<NASGU>
+
+    fretCheckbox = uicheckbox(fig, 'Text', 'FRET transfer', 'Value', false, ...
+        'Position', scalePos(60, 668, 240, 25), ...
+        'ValueChangedFcn', @(src, event) toggleFRET(src)); %#ok<NASGU>
+
+    selfquenchCheckbox = uicheckbox(fig, 'Text', 'Self-quench overlap', 'Value', false, ...
+        'Position', scalePos(60, 640, 240, 25), ...
+        'ValueChangedFcn', @(src, event) toggleSelfQuench(src)); %#ok<NASGU>
+
+    resultsArea = uitextarea(fig, ...
+        'Position', scalePos(300, 585, 1040, 142), ...
+        'Editable', 'off', 'FontName', 'monospaced', ...
+        'Value', {'(enable FRET or Self-quench, then Plot Spectra)'});
+
+    % Axes for plotting (height reduced to make room for the analysis panel)
+    ax = uiaxes(fig, 'Position', scalePos(50, 30, designW - 100, designH - 500));
+
+    % ==================================================================
+    % Local (nested) functions
+    % ==================================================================
+
+    function p = scalePos(x, y, w, h)
+        % Convert a design-space rectangle into actual-window pixels.
+        p = [x*sx, y*sy, w*sx, h*sy];
+    end
+
     function filterList()
         searchText = lower(searchBox.Value);
         filteredItems = cleanedNames(contains(lower(cleanedNames), searchText));
@@ -202,14 +259,249 @@ function FluoSimUI()
         laserList.Items = {};
     end
 
+    % ---- spectra / overlap helpers -----------------------------------
+
+    function [exData, emData, exPeakWL, emPeakWL, ok] = getFPSpectra(fluorophore)
+        % Look up a fluorophore's excitation and emission spectra by name.
+        coreName = regexprep(fluorophore, '_?(EX|EM)$', '', 'ignorecase');
+
+        ex_idx = find(contains(fluorophoreNamesRaw, 'EX', 'IgnoreCase', false) & ...
+                      contains(fluorophoreNamesRaw, coreName, 'IgnoreCase', false));
+        em_idx = find(contains(fluorophoreNamesRaw, 'EM', 'IgnoreCase', false) & ...
+                      contains(fluorophoreNamesRaw, coreName, 'IgnoreCase', false));
+
+        if numel(ex_idx) > 1
+            ex_idx = ex_idx(find(strcmp(regexprep(fluorophoreNamesRaw(ex_idx), '_?(EX|EM)$', '', 'ignorecase'), coreName), 1));
+        end
+        if numel(em_idx) > 1
+            em_idx = em_idx(find(strcmp(regexprep(fluorophoreNamesRaw(em_idx), '_?(EX|EM)$', '', 'ignorecase'), coreName), 1));
+        end
+
+        ok = ~(isempty(ex_idx) || isempty(em_idx));
+        if ~ok
+            exData = []; emData = []; exPeakWL = NaN; emPeakWL = NaN; return;
+        end
+
+        exData = data{:, ex_idx+1};
+        emData = data{:, em_idx+1};
+        [~, mi_ex] = max(exData); exPeakWL = wavelengths(mi_ex);
+        [~, mi_em] = max(emData); emPeakWL = wavelengths(mi_em);
+    end
+
+    function ov = spectralOverlap(emData_src, exData_dst)
+        % Area-normalized source emission weighted by destination excitation.
+        % Returns a 0-1 fraction (no optics applied). Used for FRET and
+        % self-quench (where src == dst).
+        v = ~isnan(emData_src) & ~isnan(exData_dst);
+        if ~any(v), ov = 0; return; end
+        e = emData_src(v);
+        a = exData_dst(v);
+        s = sum(e, 'omitnan');
+        if s <= 0, ov = 0; return; end
+        ov = sum((e ./ s) .* a, 'omitnan');
+    end
+
+    function sel = emSelection()
+        % Selected emission filter names as a cellstr (handles char or cell).
+        sel = emfilter_List.Value;
+        if ~iscell(sel), sel = cellstr(sel); end
+    end
+
+    function Em = combinedEmFilter()
+        % Product of the selected emission filters' transmission (series).
+        sel = emSelection();
+        Em = ones(height(filter_data), 1);
+        for k = 1:numel(sel)
+            ci = find(strcmp(filter_data.Properties.VariableNames, [sel{k} '_Em']), 1);
+            if ~isempty(ci)
+                Em = Em .* filter_data{:, ci};
+            end
+        end
+    end
+
+    function frac = emFilterFraction(emData_full)
+        % Fraction of an emission spectrum transmitted by the emission
+        % optics (dichroic x combined emission filter, + Quad special case).
+        % Scale-independent, so the input spectrum need not be normalized.
+        sel = emSelection();
+        Em = combinedEmFilter();
+
+        % Preserve original Quad behavior: if the Ex filter is the Quad and
+        % Quad is not among the chosen Em filters, fold in the Quad's Em band.
+        if strcmp(exfilter_List.Value, 'Quad') && ~any(strcmp(sel, 'Quad'))
+            ci = find(strcmp(filter_data.Properties.VariableNames, 'Quad_Em'), 1);
+            if ~isempty(ci), Em = Em .* filter_data{:, ci}; end
+        end
+
+        % Dichroic from the first selected emission filter
+        ci = find(strcmp(filter_data.Properties.VariableNames, [sel{1} '_Dichroic']), 1);
+        if ~isempty(ci)
+            Dichroic = filter_data{:, ci};
+        else
+            Dichroic = ones(height(filter_data), 1);
+        end
+
+        Tcombined = Dichroic .* Em;
+
+        v = ~isnan(emData_full);
+        em_wl  = wavelengths(v);
+        em_eff = emData_full(v);
+        fwl = filter_data{:, 1};
+        ov_idx = ismember(fwl, em_wl);
+
+        transmitted = em_eff .* Tcombined(ov_idx);
+        denom = sum(em_eff, 'omitnan');
+        if denom <= 0, frac = 0; else, frac = sum(transmitted, 'omitnan') / denom; end
+    end
+
+    function frac = cameraFraction(emData_full)
+        % Fraction collected after the camera quantum yield.
+        ci = find(strcmp(camera_data.Properties.VariableNames, camera_List.Value), 1);
+        QY = camera_data{:, ci};
+        cwl = camera_data{:, 1};
+
+        v = ~isnan(emData_full);
+        em_wl  = wavelengths(v);
+        em_eff = emData_full(v);
+        ov_idx = ismember(cwl, em_wl);
+
+        transmitted = em_eff .* QY(ov_idx);
+        denom = sum(em_eff, 'omitnan');
+        if denom <= 0, frac = 0; else, frac = sum(transmitted, 'omitnan') / denom; end
+    end
+
+    function [de, bestLaser, hasLaser] = donorExcitation(exData_src)
+        % Effective excitation of a fluorophore: its excitation at the best
+        % laser line, attenuated by the Ex filter (if Use Filters is on).
+        lv = str2double(laserList.Items);
+        lv = lv(~isnan(lv));
+        hasLaser = ~isempty(lv);
+
+        if ~hasLaser
+            de = max(exData_src);     % no laser -> assume peak excitation
+            bestLaser = NaN;
+            return;
+        end
+
+        best = 0; bestLaser = lv(1);
+        for q = 1:numel(lv)
+            idx = wavelengths == lv(q);
+            if any(idx)
+                val = exData_src(idx);
+                if val > best, best = val; bestLaser = lv(q); end
+            end
+        end
+        de = best;
+
+        if use_filters_flag == 1
+            ci = find(strcmp(filter_data.Properties.VariableNames, [exfilter_List.Value '_Ex']), 1);
+            if ~isempty(ci)
+                att = filter_data{filter_data{:,1} == bestLaser, ci};
+                if ~isempty(att), de = de * att; end
+            end
+        end
+    end
+
+    % ---- analysis (FRET / self-quench) -------------------------------
+
+    function lines = computeFRET()
+        lines = {};
+        sel = selectionList.Value;
+        if ~iscell(sel), sel = cellstr(sel); end
+
+        if numel(sel) ~= 2
+            lines = {'FRET: highlight exactly 2 fluorophores in the selected list.'};
+            return;
+        end
+
+        [ex1, em1, ~, emp1, ok1] = getFPSpectra(sel{1});
+        [ex2, em2, ~, emp2, ok2] = getFPSpectra(sel{2});
+        if ~ok1 || ~ok2
+            lines = {'FRET: spectra not found for one of the selected fluorophores.'};
+            return;
+        end
+
+        % Donor = lower emission-peak wavelength
+        if emp1 <= emp2
+            donName = sel{1}; accName = sel{2};
+            donEm = em1; donEx = ex1; accEx = ex2; accEm = em2;
+        else
+            donName = sel{2}; accName = sel{1};
+            donEm = em2; donEx = ex2; accEx = ex1; accEm = em1;
+        end
+
+        overlap = spectralOverlap(donEm, accEx);          % (a) raw, no optics
+        [de, bestLaser, hasLaser] = donorExcitation(donEx);
+
+        if use_filters_flag == 1
+            emFrac = emFilterFraction(accEm);             % Em filter on acceptor
+        else
+            emFrac = 1;
+        end
+
+        acceptor_excited = de * overlap;
+        collected = acceptor_excited * emFrac;            % (b) full setup
+
+        lines{end+1} = sprintf('FRET   %s (donor)  ->  %s (acceptor)', donName, accName); %#ok<AGROW>
+        lines{end+1} = sprintf('  Raw overlap (donor EM x acceptor EX) : %.3f', overlap); %#ok<AGROW>
+        if hasLaser
+            if use_filters_flag == 1
+                lines{end+1} = sprintf('  Donor excitation (%g nm + Ex filter) : %.3f', bestLaser, de); %#ok<AGROW>
+            else
+                lines{end+1} = sprintf('  Donor excitation (%g nm laser)       : %.3f', bestLaser, de); %#ok<AGROW>
+            end
+        else
+            lines{end+1} = sprintf('  Donor excitation (no laser; peak)    : %.3f', de); %#ok<AGROW>
+        end
+        if use_filters_flag == 1
+            lines{end+1} = sprintf('  Acceptor collected (Em filter)       : %.3f', collected); %#ok<AGROW>
+        else
+            lines{end+1} = sprintf('  Acceptor collected (no Em filter)    : %.3f', collected); %#ok<AGROW>
+        end
+    end
+
+    function lines = computeSelfQuench()
+        lines = {'Self-quench overlap (own EM x own EX):'};
+        items = selectionList.Items;
+        if isempty(items)
+            lines{end+1} = '  (no fluorophores in the selected list)'; %#ok<AGROW>
+            return;
+        end
+        for k = 1:numel(items)
+            [exk, emk, ~, ~, okk] = getFPSpectra(items{k});
+            if ~okk
+                lines{end+1} = sprintf('  %-18s : n/a', items{k}); %#ok<AGROW>
+                continue;
+            end
+            sq = spectralOverlap(emk, exk);   % own emission weighted by own excitation
+            lines{end+1} = sprintf('  %-18s : %.3f', items{k}, sq); %#ok<AGROW>
+        end
+    end
+
+    function updateResults()
+        resLines = {};
+        if fret_flag == 1
+            resLines = [resLines, computeFRET()];
+        end
+        if selfquench_flag == 1
+            if ~isempty(resLines), resLines{end+1} = ''; end
+            resLines = [resLines, computeSelfQuench()];
+        end
+        if isempty(resLines)
+            resultsArea.Value = {'(enable FRET or Self-quench, then Plot Spectra)'};
+        else
+            resultsArea.Value = resLines;
+        end
+    end
+
+    % ---- main plot ----------------------------------------------------
+
     function plotSpectra()
         fill_opacity = 0.7;
 
-        % Clear the plot
         cla(ax);
         hold(ax, 'on');
 
-        % Clear existing laser lines and spectra
         delete(findall(ax, 'Type', 'ConstantLine'));
         delete(findall(ax, 'Type', 'Line'));
         delete(findall(ax, 'Type', 'Text'));
@@ -217,215 +509,113 @@ function FluoSimUI()
         selectedFluorophores = selectionList.Items;
         if isempty(selectedFluorophores)
             title(ax, 'No fluorophores selected');
+            updateResults();
             return;
         end
-        
+
         % Plot filters
         if plot_filters_flag == 1
-            expectedColumnName = [exfilter_List.Value '_Ex'];
-            colIdx = find(strcmp(filter_data.Properties.VariableNames, expectedColumnName), 1);
-            Excitation = filter_data{:,colIdx};
-            wavelength_ex = filter_data{:,1};
+            ci = find(strcmp(filter_data.Properties.VariableNames, [exfilter_List.Value '_Ex']), 1);
+            plot(ax, filter_data{:,1}, filter_data{:,ci}, ':', 'Color', 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
 
-            plot(ax, wavelength_ex, Excitation, ':', 'Color', 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
-
-            expectedColumnName = [emfilter_List.Value '_Em'];
-            colIdx = find(strcmp(filter_data.Properties.VariableNames, expectedColumnName), 1);
-            Emission = filter_data{:,colIdx};
-            wavelength_em = filter_data{:,1};
-
-            plot(ax, wavelength_em, Emission, '--', 'Color', 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
+            plot(ax, filter_data{:,1}, combinedEmFilter(), '--', 'Color', 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
         end
 
         % Plot camera Quantum Yield
         if plot_Cameras_flag == 1
-            expectedColumnName = camera_List.Value;
-            colIdx = find(strcmp(camera_data.Properties.VariableNames, expectedColumnName), 1);
-            Quantum_Yield = camera_data{:,colIdx};
-            wavelength_ex = camera_data{:,1};
-
-            plot(ax, wavelength_ex, Quantum_Yield, ':', 'Color', 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
+            ci = find(strcmp(camera_data.Properties.VariableNames, camera_List.Value), 1);
+            plot(ax, camera_data{:,1}, camera_data{:,ci}, ':', 'Color', 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
         end
 
         % Plot excitation & emission spectra for each fluorophore
         for i = 1:length(selectedFluorophores)
             fluorophore = selectedFluorophores{i};
 
-            % Extract core fluorophore name (remove EX/EM suffix)
-            coreName = regexprep(fluorophore, '_?(EX|EM)$', '', 'ignorecase');
-
-            % Find excitation and emission column indices correctly
-            ex_idx = find(contains(fluorophoreNamesRaw, 'EX', 'IgnoreCase', false) & ...
-                          contains(fluorophoreNamesRaw, coreName, 'IgnoreCase', false));
-            em_idx = find(contains(fluorophoreNamesRaw, 'EM', 'IgnoreCase', false) & ...
-                          contains(fluorophoreNamesRaw, coreName, 'IgnoreCase', false));
-
-            % Ensure correct match if multiple indices exist
-            if length(ex_idx) > 1
-                ex_idx = find(strcmp(regexprep(fluorophoreNamesRaw(ex_idx), '_?(EX|EM)$', '', 'ignorecase'), coreName), 1);
-            end
-            if length(em_idx) > 1
-                specific_idx = find(strcmp(regexprep(fluorophoreNamesRaw(em_idx), '_?(EX|EM)$', '', 'ignorecase'), coreName), 1);
-                em_idx = em_idx(specific_idx);
-                clear specific_idx
-            end
-
-            % Skip if no match found
-            if isempty(ex_idx) || isempty(em_idx)
+            [exData, emData, exPeakWL, emPeakWL, ok] = getFPSpectra(fluorophore);
+            if ~ok
                 warning('No excitation or emission spectra found for %s.', fluorophore);
                 continue;
             end
+            raw_emData = emData;
 
-            % Extract excitation and emission data
-            exData = data{:, ex_idx+1};
-            emData = data{:, em_idx+1};
-            raw_emData = data{:, em_idx+1};
+            % Valid (non-NaN) excitation mask -- always defined now (BUG FIX)
+            valid_idx_ex = ~isnan(exData);
 
-            % Find max wavelength for color determination
-            [~, maxIdxEx] = max(exData);
-            [~, maxIdxEm] = max(emData);
-            colorEx = nmToRGB(wavelengths(maxIdxEx)) / 255;
-            colorEm = nmToRGB(wavelengths(maxIdxEm)) / 255;
+            % Colors from spectral peaks
+            colorEx = nmToRGB(exPeakWL) / 255;
+            colorEm = nmToRGB(emPeakWL) / 255;
 
             if plot_ExSpectra_flag == 1
-                % Plot excitation spectrum
-                valid_idx_ex = ~isnan(exData);
-                fill(ax, [wavelengths(valid_idx_ex); flip(wavelengths(valid_idx_ex))], [zeros(size(exData(valid_idx_ex))); flip(exData(valid_idx_ex))], colorEx, ...
-                    'FaceAlpha', fill_opacity, 'EdgeColor', 'none','DisplayName', [fluorophore ' EX']);
-                %plot(ax, wavelengths, exData, '-', 'Color', colorEx, 'LineWidth', 0.5, 'HandleVisibility', 'off');
+                fill(ax, [wavelengths(valid_idx_ex); flip(wavelengths(valid_idx_ex))], ...
+                     [zeros(size(exData(valid_idx_ex))); flip(exData(valid_idx_ex))], colorEx, ...
+                     'FaceAlpha', fill_opacity, 'EdgeColor', 'none', 'DisplayName', [fluorophore ' EX']);
                 plot(ax, wavelengths, exData, '-', 'Color', 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
             end
+
             % Adjust Emission based on laser excitation
             laserValues = str2double(laserList.Items);
             if ~isempty(laserValues)
                 Abs_efficiency = 0;
                 current_wavelength = wavelengths(valid_idx_ex);
                 current_abs = exData(valid_idx_ex);
+                laser_selection = 1; % default to the first laser
 
                 for ii = 1:length(laserValues)
                     idx_of_abs = current_wavelength == laserValues(ii);
-                    if ~isempty(find(idx_of_abs,1))
+                    if any(idx_of_abs)
                         curr_efficiency = current_abs(idx_of_abs);
                         if curr_efficiency > Abs_efficiency
                             Abs_efficiency = curr_efficiency;
                             laser_selection = ii;
                         end
-                    else
-                        laser_selection = 1; % default to the first laser
                     end
                 end
-                
-                % Attenutate laser power in a linear fashion based on Ex
-                % filter, transmission %
+
+                % Attenuate laser power based on Ex filter transmission %
                 if use_filters_flag == 1
-                    % If filters are selected, apply filter effects.
                     nm_to_filter = laserValues(laser_selection);
-
-                    expectedColumnName = [exfilter_List.Value '_Ex'];
-
-                    % Find the column index in filter_data
-                    colIdx = find(strcmp(filter_data.Properties.VariableNames, expectedColumnName), 1);
-
-                    laser_attenuation = filter_data{filter_data{:,1} == nm_to_filter,colIdx};
+                    ci = find(strcmp(filter_data.Properties.VariableNames, [exfilter_List.Value '_Ex']), 1);
+                    laser_attenuation = filter_data{filter_data{:,1} == nm_to_filter, ci};
                     emData = emData .* Abs_efficiency .* laser_attenuation;
                 else
                     emData = emData .* Abs_efficiency;
                 end
             end
 
-            % Adjust Emission based on Collection Effeciency
-            valid_idx_em = ~isnan(emData);
-            em_wavelength = wavelengths(valid_idx_em);
+            % Adjust Emission based on collection efficiency (emission optics)
             if use_filters_flag == 1
-                % If filters are selected, apply filter effects.
-                expectedColumnName = [emfilter_List.Value '_Dichroic'];
-                colIdx = find(strcmp(filter_data.Properties.VariableNames, expectedColumnName), 1);
-                Dichroic = filter_data{:,colIdx};
-
-                if strcmp(exfilter_List.Value, 'Quad') && ~strcmp(emfilter_List.Value, 'Quad')
-                    expectedColumnName = [exfilter_List.Value '_Em'];
-                    colIdx = find(strcmp(filter_data.Properties.VariableNames, expectedColumnName), 1);
-                    Emission = filter_data{:,colIdx};
-
-                    expectedColumnName = [emfilter_List.Value '_Em'];
-                    colIdx = find(strcmp(filter_data.Properties.VariableNames, expectedColumnName), 1);
-                    Emission = Emission .* filter_data{:,colIdx};
-                else
-                    expectedColumnName = [emfilter_List.Value '_Em'];
-                    colIdx = find(strcmp(filter_data.Properties.VariableNames, expectedColumnName), 1);
-                    Emission = filter_data{:,colIdx};
-                end
-
-                Light_Transmission_to_camera = Dichroic .* Emission;
-
-                filter_wavelength = filter_data{:,1};
-
-                overlapping_wavelength = find(ismember(filter_wavelength, em_wavelength));
-
-                current_emission_efficiency = emData(valid_idx_em);
-                filtered_emission_efficiency = current_emission_efficiency .* Light_Transmission_to_camera(overlapping_wavelength); %#ok<FNDSB>
-
-                filter_attenuation = sum(filtered_emission_efficiency,'omitnan') / sum(current_emission_efficiency,'omitnan');
-                emData = emData .* filter_attenuation;
+                emData = emData .* emFilterFraction(emData);
             end
 
             if use_Cameras_flag == 1
-                % If camera quantum yield is selected, apply quantum yield effects.
-                expectedColumnName = camera_List.Value;
-                colIdx = find(strcmp(camera_data.Properties.VariableNames, expectedColumnName), 1);
-                Quantum_Yield = camera_data{:,colIdx};
-
-                camera_wavelength = camera_data{:,1};
-
-                overlapping_wavelength = find(ismember(camera_wavelength, em_wavelength));
-
-                current_emission_efficiency = emData(valid_idx_em);
-                camera_collection_efficiency = current_emission_efficiency .* Quantum_Yield(overlapping_wavelength); %#ok<FNDSB>
-
-                camera_quantum_yield = sum(camera_collection_efficiency,'omitnan') / sum(current_emission_efficiency,'omitnan');
-                emData = emData .* camera_quantum_yield;
+                emData = emData .* cameraFraction(emData);
             end
 
             if plot_EmSpectra_flag == 1
-                % Plot emission spectrum
-                valid_idx_ex = ~isnan(emData);
-                fill(ax, [wavelengths(valid_idx_ex); flip(wavelengths(valid_idx_ex))], [zeros(size(emData(valid_idx_ex))); flip(emData(valid_idx_ex))], colorEm, ...
-                    'FaceAlpha', fill_opacity, 'EdgeColor', 'none', 'DisplayName', [fluorophore ' EM']);
-                %plot(ax, wavelengths, emData, '--', 'Color', colorEm, 'LineWidth', 0.5, 'HandleVisibility', 'off');
+                valid_em = ~isnan(emData);
+                fill(ax, [wavelengths(valid_em); flip(wavelengths(valid_em))], ...
+                     [zeros(size(emData(valid_em))); flip(emData(valid_em))], colorEm, ...
+                     'FaceAlpha', fill_opacity, 'EdgeColor', 'none', 'DisplayName', [fluorophore ' EM']);
                 plot(ax, wavelengths, emData, '--', 'Color', 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
             end
 
-            % Find peak emission intensity and corresponding wavelength
+            % Peak emission intensity / wavelength label
             [peakIntensity, peakIndex] = max(emData);
             peakWavelength = wavelengths(peakIndex);
 
-            Collected_light_relative_to_full_emSpectra = sum(emData,'omitnan') / sum(raw_emData,'omitnan');
-
-            if use_filters_flag == 1 | ~isempty(laserValues) | use_Cameras_flag %#ok<OR2>
-                % Add text above the peak with a small vertical offset (0.02 is an example)
+            if use_filters_flag == 1 || ~isempty(laserValues) || use_Cameras_flag == 1
                 text(ax, peakWavelength, peakIntensity + 0.02, sprintf('%.2f', peakIntensity), ...
                     'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'center', 'FontSize', 12, ...
-                    'Color', 'k', 'BackgroundColor','w');
-                % KLS 20250304
-                % I thought there might be a difference between the max abs
-                % peak and the integrated emission relative to the raw
-                % emission. After testing with a few fluorophores and
-                % filter/laser settings. There doesn't appear to be a
-                % difference. I think it might be a calculation mismatach.
-                % Like I think I'm calculating the first thing, but it's
-                % really the second thing the whole time.
-                %text(ax, peakWavelength, peakIntensity + 0.02, sprintf('%.2f (%.2f)', peakIntensity, Collected_light_relative_to_full_emSpectra), ...
-                %    'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'center', 'FontSize', 12, ...
-                %    'Color', 'k', 'BackgroundColor','w');
+                    'Color', 'k', 'BackgroundColor', 'w');
             end
         end
-        
+
         title(ax, 'Excitation and Emission Spectra');
         xlabel(ax, 'Wavelength (nm)');
         xlim(ax, [325 800])
 
         ylabel(ax, 'Relative intensity (a.u.)');
-        ylim(ax,[0 1.1])
+        ylim(ax, [0 1.1])
         legend(ax, 'show');
         hold(ax, 'off');
 
@@ -433,8 +623,10 @@ function FluoSimUI()
         laserValues = str2double(laserList.Items);
         for i = 1:length(laserValues)
             xline(ax, laserValues(i), 'Color', nmToRGB(laserValues(i)) / 255, 'LineWidth', 3, 'HandleVisibility', 'off');
-            %xline(ax, laserValues(i), '--', 'Color', 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
         end
+
+        % Refresh the analysis panel
+        updateResults();
     end
 
     function addLaser()
@@ -444,7 +636,7 @@ function FluoSimUI()
             laserList.Items = [currentLasers, laserValue];
         end
     end
-    
+
     function removeLaser()
         selectedToRemove = laserList.Value;
         laserList.Items = setdiff(laserList.Items, selectedToRemove, 'stable');
@@ -492,59 +684,44 @@ function FluoSimUI()
     end
 
     function toggleFilters(src)
-        if src.Value
-            use_filters_flag = 1;
-        else
-            use_filters_flag = 0;
-        end
+        use_filters_flag = double(src.Value);
     end
 
     function togglePlotFilters(src)
-        if src.Value
-            plot_filters_flag = 1;
-        else
-            plot_filters_flag = 0;
-        end
+        plot_filters_flag = double(src.Value);
     end
 
     function toggleCameras(src)
-        if src.Value
-            use_Cameras_flag = 1;
-        else
-            use_Cameras_flag = 0;
-        end
+        use_Cameras_flag = double(src.Value);
     end
 
     function togglePlotCameras(src)
-        if src.Value
-            plot_Cameras_flag = 1;
-        else
-            plot_Cameras_flag = 0;
-        end
+        plot_Cameras_flag = double(src.Value);
     end
 
     function togglePlot_ExSpectra(src)
-        if src.Value
-            plot_ExSpectra_flag = 1;
-        else
-            plot_ExSpectra_flag = 0;
-        end
+        plot_ExSpectra_flag = double(src.Value);
     end
 
     function togglePlot_EmSpectra(src)
-        if src.Value
-            plot_EmSpectra_flag = 1;
-        else
-            plot_EmSpectra_flag = 0;
-        end
+        plot_EmSpectra_flag = double(src.Value);
+    end
+
+    function toggleFRET(src)
+        fret_flag = double(src.Value);
+        updateResults();   % immediate feedback (no full replot needed)
+    end
+
+    function toggleSelfQuench(src)
+        selfquench_flag = double(src.Value);
+        updateResults();
     end
 
     function enforceSelection(src)
-        % If no value is selected, revert to the previous selection stored in UserData.
+        % Revert to the previous selection if the user deselects everything.
         if isempty(src.Value)
             src.Value = src.UserData;
         else
-            % Update UserData with the current valid selection.
             src.UserData = src.Value;
         end
     end
